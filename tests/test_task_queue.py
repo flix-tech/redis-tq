@@ -5,7 +5,7 @@ import uuid
 import pytest
 import redis
 
-from yield_curve_forecast import task_queue
+from redistq import task_queue
 
 
 REDIS_HOST = 'localhost'

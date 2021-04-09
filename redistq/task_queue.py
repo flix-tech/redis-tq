@@ -5,8 +5,6 @@ from uuid import uuid4
 
 import redis
 
-import yield_curve_forecast.config as config
-
 logger = logging.getLogger(__name__)
 
 
@@ -34,7 +32,7 @@ class TaskQueue:
 
     """
 
-    def __init__(self, host, name, reset=False):
+    def __init__(self, host, name, timeout, reset=False):
         """Initialize the task queue.
 
         Note: a task has to be at any given time either in the task
@@ -47,6 +45,9 @@ class TaskQueue:
             hostname of the redis server
         name : str
             name of the task queue
+        timeout : int
+            timeout in seconds for getting new tasks and waiting for
+            producer to generate ones
         reset : bool
             If true, reset existing keys in the DB that have `name` as
             prefix.
@@ -59,7 +60,7 @@ class TaskQueue:
 
         # timeout for getting new tasks + waiting for producer to
         # generate ones
-        self.timeout = config.WORKER_TIMEOUT * 60  # minutes
+        self.timeout = timeout
         self.socket_timeout = 25
 
         self.connect()
