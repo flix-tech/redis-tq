@@ -4,7 +4,6 @@ import uuid
 import os
 
 import pytest
-import redis
 
 from redistq import task_queue
 
@@ -19,7 +18,7 @@ def taskqueue():
 
     name = str(uuid.uuid4())
 
-    tq = task_queue.TaskQueue(REDIS_HOST, name)
+    tq = task_queue.TaskQueue(REDIS_HOST, name, 10)
 
     yield tq
 
@@ -27,25 +26,7 @@ def taskqueue():
     tq._reset()
 
 
-def _has_redis():
-    try:
-        rs = redis.Redis(host=REDIS_HOST)
-        rs.ping()
-    except Exception as e:
-        logger.exception(e)
-        raise
-        return False
-    return True
-
-
-# decorator to check if we're running with redis
-has_redis = pytest.mark.skipif(
-    not _has_redis(),
-    reason='requires Redis running on {}'.format(REDIS_HOST)
-)
-
-
-@has_redis
+@pytest.mark.redis
 def test_add(taskqueue):
     # add two tasks and get them back in correct order
     TASKS = ['foo', 'bar']
@@ -58,7 +39,7 @@ def test_add(taskqueue):
     assert task == TASKS[1]
 
 
-@has_redis
+@pytest.mark.redis
 def test_get(taskqueue):
     taskqueue.timeout = 1
     TASK = 'foo'
@@ -69,7 +50,7 @@ def test_get(taskqueue):
     assert taskqueue.get(10) == (None, None)
 
 
-@has_redis
+@pytest.mark.redis
 def test_complete(taskqueue):
     TIMEOUT = 1
 
@@ -89,7 +70,7 @@ def test_complete(taskqueue):
     assert taskqueue.is_empty()
 
 
-@has_redis
+@pytest.mark.redis
 def test_complete_warning(taskqueue, caplog):
     taskqueue.add('foo')
     _, id_ = taskqueue.get(1)
@@ -101,7 +82,7 @@ def test_complete_warning(taskqueue, caplog):
     assert "was not being processed" in caplog.text
 
 
-@has_redis
+@pytest.mark.redis
 def test_is_empty(taskqueue):
     assert taskqueue.is_empty()
 
@@ -115,7 +96,7 @@ def test_is_empty(taskqueue):
     assert taskqueue.is_empty()
 
 
-@has_redis
+@pytest.mark.redis
 def test_expired(taskqueue):
     TIMEOUT = 1
     taskqueue.timeout = TIMEOUT
@@ -135,7 +116,7 @@ def test_expired(taskqueue):
     assert tend - tstart > TIMEOUT
 
 
-@has_redis
+@pytest.mark.redis
 def test_ttl(taskqueue, caplog):
     TIMEOUT = 1
     taskqueue.timeout = TIMEOUT
@@ -160,7 +141,7 @@ def test_ttl(taskqueue, caplog):
     assert "failed too many times" in caplog.text
 
 
-@has_redis
+@pytest.mark.redis
 def test_reschedule(taskqueue):
     taskqueue.timeout = 1
     taskqueue.add('foo')
@@ -173,13 +154,13 @@ def test_reschedule(taskqueue):
     assert task == 'foo'
 
 
-@has_redis
+@pytest.mark.redis
 def test_reschedule_error(taskqueue):
     with pytest.raises(ValueError):
         taskqueue.reschedule('bar')
 
 
-@has_redis
+@pytest.mark.redis
 def test_full(taskqueue):
     TASKS = ['FOO', 'BAR', 'BAZ']
     for t in TASKS:
@@ -197,7 +178,7 @@ def test_full(taskqueue):
     assert counter == len(TASKS)
 
 
-@has_redis
+@pytest.mark.redis
 def test_complete_rescheduled_task(taskqueue):
     TIMEOUT = 1
     TASK_CONTENT = 'sloth'
@@ -218,7 +199,7 @@ def test_complete_rescheduled_task(taskqueue):
     assert taskqueue.is_empty()
 
 
-@has_redis
+@pytest.mark.redis
 def test_tolerate_double_completion(taskqueue):
     TIMEOUT = 1
     TASK_CONTENT = 'sloth'
@@ -246,7 +227,7 @@ def test_tolerate_double_completion(taskqueue):
     assert taskqueue.is_empty()
 
 
-@has_redis
+@pytest.mark.redis
 def test_task_queue_len(taskqueue):
 
     # empty queue
