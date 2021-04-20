@@ -31,7 +31,9 @@ def _has_redis():
     try:
         rs = redis.Redis(host=REDIS_HOST)
         rs.ping()
-    except Exception:
+    except Exception as e:
+        logger.exception(e)
+        raise
         return False
     return True
 
