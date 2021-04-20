@@ -33,7 +33,7 @@ class TaskQueue:
     """
 
     def __init__(
-        self, host, name, timeout, reset=False, ttl_zero_callback=None
+        self, host, name, timeout=0, reset=False, ttl_zero_callback=None
     ):
         """Initialize the task queue.
 
