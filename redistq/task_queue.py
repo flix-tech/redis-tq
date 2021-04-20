@@ -103,7 +103,6 @@ class TaskQueue:
         """
         # we wrap the task itself with some meta data
         id_ = uuid4().hex
-        ttl = ttl
         wrapped_task = {
             'ttl': ttl,
             'task': task,
