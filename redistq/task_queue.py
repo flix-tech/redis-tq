@@ -186,7 +186,10 @@ class TaskQueue:
                 yield task, id_
                 self.complete(id_)
             if self.is_empty():
-                logger.info('Preprocessing queue is empty. Stopping worker...')
+                logger.info(
+                    f'{self._queue} and {self._processing_queue} are empty. '
+                    'Stopping worker...'
+                )
                 break
 
     def complete(self, task_id):
