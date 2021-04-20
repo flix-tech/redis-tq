@@ -179,7 +179,6 @@ class TaskQueue:
 
         return task['task'], task_id
 
-
     def get_tasks(self, lease_timeout):
         while True:
             task, id_ = self.get(lease_timeout)
@@ -189,7 +188,6 @@ class TaskQueue:
             if self.is_empty():
                 logger.info('Preprocessing queue is empty. Stopping worker...')
                 break
-
 
     def complete(self, task_id):
         """Mark a task as completed.
