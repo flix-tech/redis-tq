@@ -8,7 +8,7 @@ import redis
 from redistq import task_queue
 
 
-REDIS_HOST = 'localhost'
+REDIS_HOST = 'redis'
 
 logger = logging.getLogger(__name__)
 
