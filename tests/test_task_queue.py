@@ -1,6 +1,7 @@
 import logging
 import time
 import uuid
+import os
 
 import pytest
 import redis
@@ -8,7 +9,7 @@ import redis
 from redistq import task_queue
 
 
-REDIS_HOST = 'redis'
+REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
 
 logger = logging.getLogger(__name__)
 
