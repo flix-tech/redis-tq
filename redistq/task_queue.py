@@ -32,7 +32,9 @@ class TaskQueue:
 
     """
 
-    def __init__(self, host, name, timeout, reset=False):
+    def __init__(
+        self, host, name, timeout, reset=False, ttl_zero_callback=None
+    ):
         """Initialize the task queue.
 
         Note: a task has to be at any given time either in the task
@@ -51,7 +53,8 @@ class TaskQueue:
         reset : bool
             If true, reset existing keys in the DB that have `name` as
             prefix.
-
+        ttl_zero_callback : function
+            a function that is called if a task's ttl <= 0
         """
         self._queue = name + ':queue'
         self._processing_queue = name + ':processing'
@@ -59,8 +62,11 @@ class TaskQueue:
         self._host = host
 
         # timeout for getting new tasks + waiting for producer to
-        # generate ones
+        # generate those tasks
         self.timeout = timeout
+        # called when ttl <= 0 for a task
+        self.ttl_zero_callback = ttl_zero_callback
+
         self.socket_timeout = 25
 
         self.connect()
@@ -305,10 +311,12 @@ class TaskQueue:
                     f'A lease expired, probably job failed: {key} => {task}')
                 task['ttl'] -= 1
                 if task['ttl'] <= 0:
-                    logger.error(f'Job {task} with it {id_ }failed too many'
+                    logger.error(f'Job {task} with it {id_ } failed too many'
                                  ' times, dropping it.')
                     self.conn.lrem(self._processing_queue, 0, id_)
                     self.conn.delete(key)
+                    if self.ttl_zero_callback:
+                        self.ttl_zero_callback(self, id_, task)
                     continue
 
                 task['deadline'] = None
