@@ -8,6 +8,8 @@ jobs:
   test:
     name: Test Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    env:
+      REDIS_HOST: redis
 
     services:
       redis:
@@ -38,8 +40,6 @@ jobs:
 
     - name: Run tests
       run: make test
-      env:
-        REDIS_HOST: redis
 
     - name: Run linter
       run: make lint
