@@ -315,7 +315,7 @@ class TaskQueue:
                     self.conn.lrem(self._processing_queue, 0, id_)
                     self.conn.delete(key)
                     if self.ttl_zero_callback:
-                        self.ttl_zero_callback(self, id_, task)
+                        self.ttl_zero_callback(id_, task)
                     continue
 
                 task['deadline'] = None
