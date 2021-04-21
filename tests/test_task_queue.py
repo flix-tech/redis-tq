@@ -9,6 +9,7 @@ from redistq import task_queue
 
 
 REDIS_HOST = 'localhost'
+LEASE_TIMEOUT = 1
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ def taskqueue():
 
     name = str(uuid.uuid4())
 
-    tq = task_queue.TaskQueue(REDIS_HOST, name)
+    tq = task_queue.TaskQueue(REDIS_HOST, name, LEASE_TIMEOUT)
 
     yield tq
 
@@ -49,9 +50,9 @@ def test_add(taskqueue):
     for task in TASKS:
         taskqueue.add(task)
 
-    task, _ = taskqueue.get(10)
+    task, _ = taskqueue.get()
     assert task == TASKS[0]
-    task, _ = taskqueue.get(10)
+    task, _ = taskqueue.get()
     assert task == TASKS[1]
 
 
@@ -60,27 +61,25 @@ def test_get(taskqueue):
     taskqueue.timeout = 1
     TASK = 'foo'
     taskqueue.add(TASK)
-    task, _ = taskqueue.get(10)
+    task, _ = taskqueue.get()
     assert task == TASK
     # calling on empty queue returns None
-    assert taskqueue.get(10) == (None, None)
+    assert taskqueue.get() == (None, None)
 
 
 @has_redis
 def test_complete(taskqueue):
-    TIMEOUT = 1
-
     # boring case
     taskqueue.add('foo', ttl=1)
-    _, id_ = taskqueue.get(TIMEOUT)
+    _, id_ = taskqueue.get()
     assert not taskqueue.is_empty()
     taskqueue.complete(id_)
     assert taskqueue.is_empty()
 
     # interesting case: we complete the task after it expired already
     taskqueue.add('foo', ttl=1)
-    _, id_ = taskqueue.get(TIMEOUT)
-    time.sleep(TIMEOUT + 1)
+    _, id_ = taskqueue.get()
+    time.sleep(LEASE_TIMEOUT + 1)
     assert taskqueue.is_empty()
     taskqueue.complete(id_)
     assert taskqueue.is_empty()
@@ -89,7 +88,7 @@ def test_complete(taskqueue):
 @has_redis
 def test_complete_warning(taskqueue, caplog):
     taskqueue.add('foo')
-    _, id_ = taskqueue.get(1)
+    _, id_ = taskqueue.get()
     caplog.clear()
     taskqueue.complete(id_)
     assert "was not being processed" not in caplog.text
@@ -105,7 +104,7 @@ def test_is_empty(taskqueue):
     taskqueue.add('foo')
     assert not taskqueue.is_empty()
 
-    task, id_ = taskqueue.get(10)
+    task, id_ = taskqueue.get()
     assert not taskqueue.is_empty()
 
     taskqueue.complete(id_)
@@ -117,7 +116,7 @@ def test_expired(taskqueue):
     TIMEOUT = 1
     taskqueue.timeout = TIMEOUT
     taskqueue.add('foo', 1)
-    taskqueue.get(TIMEOUT)
+    taskqueue.get()
     assert not taskqueue.is_empty()
     time.sleep(TIMEOUT + 1)
     assert taskqueue.is_empty()
@@ -127,7 +126,7 @@ def test_expired(taskqueue):
 
     tstart = time.time()
     while not taskqueue.is_empty():
-        taskqueue.get(TIMEOUT)
+        taskqueue.get()
     tend = time.time()
     assert tend - tstart > TIMEOUT
 
@@ -139,18 +138,18 @@ def test_ttl(taskqueue, caplog):
     taskqueue.add('foo', ttl=3)
 
     # start a task and let it expire...
-    taskqueue.get(TIMEOUT)
+    taskqueue.get()
     time.sleep(TIMEOUT + 1)
     # check and put it back into task queue
     assert not taskqueue.is_empty()
 
     # second attempt...
-    taskqueue.get(TIMEOUT)
+    taskqueue.get()
     time.sleep(TIMEOUT + 1)
     assert not taskqueue.is_empty()
 
     # third attempt... *boom*
-    taskqueue.get(TIMEOUT)
+    taskqueue.get()
     time.sleep(TIMEOUT + 1)
     caplog.clear()
     assert taskqueue.is_empty()
@@ -161,12 +160,12 @@ def test_ttl(taskqueue, caplog):
 def test_reschedule(taskqueue):
     taskqueue.timeout = 1
     taskqueue.add('foo')
-    _, id_ = taskqueue.get(10)
+    _, id_ = taskqueue.get()
     # task queue should be empty as 'foo' is in the processing queue
-    assert taskqueue.get(10) == (None, None)
+    assert taskqueue.get() == (None, None)
 
     taskqueue.reschedule(id_)
-    task, _ = taskqueue.get(10)
+    task, _ = taskqueue.get()
     assert task == 'foo'
 
 
@@ -184,7 +183,7 @@ def test_full(taskqueue):
 
     counter = 0
     while True:
-        task, task_id = taskqueue.get(1)
+        task, task_id = taskqueue.get()
         if task is not None:
             taskqueue.complete(task_id)
             counter += 1
@@ -202,7 +201,7 @@ def test_complete_rescheduled_task(taskqueue):
     taskqueue.add(TASK_CONTENT, ttl=3)
 
     # start a task and let it expire...
-    _, task_id = taskqueue.get(TIMEOUT)
+    _, task_id = taskqueue.get()
     time.sleep(TIMEOUT + 1)
 
     # check and put it back into task queue
@@ -217,20 +216,19 @@ def test_complete_rescheduled_task(taskqueue):
 
 @has_redis
 def test_tolerate_double_completion(taskqueue):
-    TIMEOUT = 1
     TASK_CONTENT = 'sloth'
-    taskqueue.timeout = TIMEOUT
+    taskqueue.timeout = LEASE_TIMEOUT
     taskqueue.add(TASK_CONTENT, ttl=3)
 
     # start a task and let it expire...
-    task, task_id = taskqueue.get(TIMEOUT)
-    time.sleep(TIMEOUT + 1)
+    task, task_id = taskqueue.get()
+    time.sleep(LEASE_TIMEOUT + 1)
 
     # check and put it back into task queue
     assert not taskqueue.is_empty()
 
     # get it again
-    _, task_redo_id = taskqueue.get(TIMEOUT)
+    _, task_redo_id = taskqueue.get()
     assert task_redo_id == task_id
 
     # now the task is completed, although it took a long time...
@@ -258,7 +256,7 @@ def test_task_queue_len(taskqueue):
     # removing getting the tasks w/o completing them
     ids = []
     for task in TASKS:
-        ids.append(taskqueue.get(10)[1])
+        ids.append(taskqueue.get()[1])
     assert len(taskqueue) == len(TASKS)
 
     for id_ in ids:
