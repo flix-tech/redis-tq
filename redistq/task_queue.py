@@ -194,11 +194,11 @@ class TaskQueue:
 
         Yields
         -------
-        (dict, str) :
+        (any, str) :
             A tuple containing the task content and its id
         """
         while True:
-            task, id_ = self.get(self.lease_timeout)
+            task, id_ = self.get()
             if task is not None:
                 yield task, id_
                 self.complete(id_)

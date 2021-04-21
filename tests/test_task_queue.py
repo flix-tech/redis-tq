@@ -262,3 +262,16 @@ def test_task_queue_len(taskqueue):
     for id_ in ids:
         taskqueue.complete(id_)
     assert len(taskqueue) == 0
+
+
+@has_redis
+def test_iterator(taskqueue):
+    TIMEOUT = 1
+    taskqueue.timeout = TIMEOUT
+    taskqueue.add('bla', ttl=3)
+    taskqueue.add('blip', ttl=3)
+
+    found_tasks = []
+    for task, id in taskqueue:
+        found_tasks.append(task)
+    assert found_tasks == ['bla', 'blip']
