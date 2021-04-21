@@ -179,6 +179,24 @@ class TaskQueue:
         return task['task'], task_id
 
     def __iter__(self):
+        """Iterate over tasks and mark them as complete.
+
+        This allows to easily iterate over the tasks to process them:
+
+            >>> for task in task_queue:
+                    execute_task(task)
+
+        it takes care of marking the tasks as done once they are processed
+        and checking the emptiness of the queue before leaving.
+
+        Notice that this iterator can wait for a long time waiting for work
+        units to appear, depending on the value set as lease_timeout.
+
+        Yields
+        -------
+        (dict, str) :
+            A tuple containing the task content and its id
+        """
         while True:
             task, id_ = self.get(self.lease_timeout)
             if task is not None:
