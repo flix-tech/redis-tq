@@ -33,7 +33,8 @@ class TaskQueue:
     """
 
     def __init__(
-        self, host, name, timeout=0, reset=False, ttl_zero_callback=None
+        self, host, name, lease_timeout, timeout=0, reset=False,
+        ttl_zero_callback=None,
     ):
         """Initialize the task queue.
 
@@ -47,6 +48,9 @@ class TaskQueue:
             hostname of the redis server
         name : str
             name of the task queue
+        lease_timeout : int
+            lease timeout in seconds, i.e. how much time we give the
+            task to process until we can assume it didn't succeed
         timeout : int
             timeout in seconds for getting new tasks and waiting for
             producer to generate ones
@@ -60,6 +64,7 @@ class TaskQueue:
         self._processing_queue = name + ':processing'
         self._tasks = name + ':tasks:'
         self._host = host
+        self.lease_timeout = lease_timeout
 
         # timeout for getting new tasks + waiting for producer to
         # generate those tasks
@@ -114,7 +119,7 @@ class TaskQueue:
         # put task-id into the task queue
         self.conn.lpush(self._queue, id_)
 
-    def get(self, lease_timeout):
+    def get(self):
         """Get a task from the task queue.
 
         This method returns the next task from the queue. It also puts
@@ -130,12 +135,6 @@ class TaskQueue:
         removed from the processing queue and the TTL is decreased by
         one. If TTL is still > 0 the task will be put back into the task
         queue for retry.
-
-        Parameters
-        ----------
-        lease_timeout : int
-            lease timeout in seconds, i.e. how much time we give the
-            task to process until we assume it died
 
         Returns
         -------
@@ -172,23 +171,23 @@ class TaskQueue:
         logger.info(f'Got task with id {task_id}')
 
         now = time.time()
-        deadline = now + lease_timeout
+        deadline = now + self.lease_timeout
         task = self._deserialize(self.conn.get(self._tasks + task_id))
         task['deadline'] = deadline
         self.conn.set(self._tasks + task_id, self._serialize(task))
 
         return task['task'], task_id
 
-    def get_tasks(self, lease_timeout):
+    def __iter__(self):
         while True:
-            task, id_ = self.get(lease_timeout)
+            task, id_ = self.get(self.lease_timeout)
             if task is not None:
                 yield task, id_
                 self.complete(id_)
             if self.is_empty():
-                logger.info(
+                logger.debug(
                     f'{self._queue} and {self._processing_queue} are empty. '
-                    'Stopping worker...'
+                    'Nothing to process anymore...'
                 )
                 break
 
