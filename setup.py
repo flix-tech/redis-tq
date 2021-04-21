@@ -15,7 +15,7 @@ setup(
     author_email="team.bus-factor@flixbus.com",
     # FIXME!
     url='https://example.com',
-    python_requires='>=3.8',
+    python_requires='>=3.6',
     install_requires=[
         'redis',
     ],
