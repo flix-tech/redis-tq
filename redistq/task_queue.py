@@ -33,7 +33,7 @@ class TaskQueue:
     """
 
     def __init__(
-        self, host, name, lease_timeout, timeout=0, reset=False,
+        self, host, name, lease_timeout, reset=False,
         ttl_zero_callback=None,
     ):
         """Initialize the task queue.
@@ -51,9 +51,6 @@ class TaskQueue:
         lease_timeout : int
             lease timeout in seconds, i.e. how much time we give the
             task to process until we can assume it didn't succeed
-        timeout : int
-            timeout in seconds for getting new tasks and waiting for
-            producer to generate ones
         reset : bool
             If true, reset existing keys in the DB that have `name` as
             prefix.
@@ -68,9 +65,6 @@ class TaskQueue:
         self._host = host
         self.lease_timeout = lease_timeout
 
-        # timeout for getting new tasks + waiting for producer to
-        # generate those tasks
-        self.timeout = timeout
         # called when ttl <= 0 for a task
         self.ttl_zero_callback = ttl_zero_callback
 
@@ -147,25 +141,10 @@ class TaskQueue:
         """
         # See comment in __init__ about moving jobs between queues in an
         # atomic fashion before you modify!
-        # we need to deal with the socket timeout,
-        # see https://github.com/andymccurdy/redis-py/issues/1305
-        for _ in range(1 + self.timeout // (self.socket_timeout - 5)):
-            try:
-                task_id = self.conn.brpoplpush(
-                    self._queue,
-                    self._processing_queue,
-                    self.socket_timeout - 5,
-                    )
-            except redis.exceptions.TimeoutError:
-                logger.exception('Redis timeout, will reset the connection')
-                self.connect()
-                # we consider the task as None in case of timeout
-                # to handle it like an operational timneout
-                task_id = None
-            if task_id is None:
-                continue
-            else:
-                break
+        task_id = self.conn.rpoplpush(
+            self._queue,
+            self._processing_queue,
+        )
 
         if task_id is None:
             return None, None

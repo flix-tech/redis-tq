@@ -43,7 +43,6 @@ def test_add(taskqueue):
 
 @pytest.mark.redis
 def test_get(taskqueue):
-    taskqueue.timeout = 1
     TASK = 'foo'
     taskqueue.add(TASK)
     task, _ = taskqueue.get()
@@ -98,8 +97,6 @@ def test_is_empty(taskqueue):
 
 @pytest.mark.redis
 def test_expired(taskqueue):
-    TIMEOUT = 1
-    taskqueue.timeout = TIMEOUT
     taskqueue.add('foo', 1)
     taskqueue.get()
     assert not taskqueue.is_empty()
@@ -113,13 +110,11 @@ def test_expired(taskqueue):
     while not taskqueue.is_empty():
         taskqueue.get()
     tend = time.time()
-    assert tend - tstart > TIMEOUT
+    assert tend - tstart > LEASE_TIMEOUT
 
 
 @pytest.mark.redis
 def test_ttl(taskqueue, caplog):
-    TIMEOUT = 1
-    taskqueue.timeout = TIMEOUT
     taskqueue.add('foo', ttl=3)
 
     # start a task and let it expire...
@@ -171,7 +166,6 @@ def test_callback(taskqueue):
 
 @pytest.mark.redis
 def test_reschedule(taskqueue):
-    taskqueue.timeout = 1
     taskqueue.add('foo')
     _, id_ = taskqueue.get()
     # task queue should be empty as 'foo' is in the processing queue
@@ -208,9 +202,7 @@ def test_full(taskqueue):
 
 @pytest.mark.redis
 def test_complete_rescheduled_task(taskqueue):
-    TIMEOUT = 1
     TASK_CONTENT = 'sloth'
-    taskqueue.timeout = TIMEOUT
     taskqueue.add(TASK_CONTENT, ttl=3)
 
     # start a task and let it expire...
@@ -279,8 +271,6 @@ def test_task_queue_len(taskqueue):
 
 @pytest.mark.redis
 def test_iterator(taskqueue):
-    TIMEOUT = 1
-    taskqueue.timeout = TIMEOUT
     taskqueue.add('bla', ttl=3)
     taskqueue.add('blip', ttl=3)
 
