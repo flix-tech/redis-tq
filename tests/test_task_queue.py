@@ -2,6 +2,7 @@ import logging
 import time
 import uuid
 import os
+from unittest import mock
 
 import pytest
 
@@ -138,6 +139,34 @@ def test_ttl(taskqueue, caplog):
     caplog.clear()
     assert taskqueue.is_empty()
     assert "failed too many times" in caplog.text
+
+
+@pytest.mark.redis
+def test_callback(taskqueue):
+
+    mock_cb = mock.Mock()
+    taskqueue.ttl_zero_callback = mock_cb
+
+    taskqueue.add('foo', ttl=3)
+
+    # start a task and let it expire...
+    taskqueue.get()
+    time.sleep(LEASE_TIMEOUT + 1)
+    # check and put it back into task queue
+    assert not taskqueue.is_empty()
+    assert not mock_cb.called
+
+    # second attempt...
+    taskqueue.get()
+    time.sleep(LEASE_TIMEOUT + 1)
+    assert not taskqueue.is_empty()
+    assert not mock_cb.called
+
+    # third attempt... *boom*
+    taskqueue.get()
+    time.sleep(LEASE_TIMEOUT + 1)
+    assert taskqueue.is_empty()
+    assert mock_cb.called
 
 
 @pytest.mark.redis
