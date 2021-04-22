@@ -17,13 +17,13 @@ class TaskQueue:
 
     >>> tq = TaskQueue('localhost', 'myqueue')
     >>> for i in range(10):
-    ...     tq.add(some task)
+    ...     tq.add(some task, lease_timeout)
 
     On the consuming side:
 
     >>> tq = TaskQueue('localhost', 'myqueue')
     >>> while True:
-    ...     task, task_id = tq.get(lease_timeout)
+    ...     task, task_id = tq.get()
     ...     if task is not None:
     ...         # do something
     ...         tq.complete(task_id)
@@ -32,10 +32,7 @@ class TaskQueue:
 
     """
 
-    def __init__(
-        self, host, name, lease_timeout, reset=False,
-        ttl_zero_callback=None,
-    ):
+    def __init__(self, host, name, reset=False, ttl_zero_callback=None):
         """Initialize the task queue.
 
         Note: a task has to be at any given time either in the task
@@ -48,9 +45,6 @@ class TaskQueue:
             hostname of the redis server
         name : str
             name of the task queue
-        lease_timeout : int
-            lease timeout in seconds, i.e. how much time we give the
-            task to process until we can assume it didn't succeed
         reset : bool
             If true, reset existing keys in the DB that have `name` as
             prefix.
@@ -63,7 +57,6 @@ class TaskQueue:
         self._processing_queue = name + ':processing'
         self._tasks = name + ':tasks:'
         self._host = host
-        self.lease_timeout = lease_timeout
 
         # called when ttl <= 0 for a task
         self.ttl_zero_callback = ttl_zero_callback
@@ -92,12 +85,15 @@ class TaskQueue:
         return (self.conn.llen(self._queue)
                 + self.conn.llen(self._processing_queue))
 
-    def add(self, task, ttl=3):
+    def add(self, task, lease_timeout, ttl=3):
         """Add a task to the task queue.
 
         Parameters
         ----------
         task : something that can be JSON-serialized
+        lease_timeout : int
+            lease timeout in seconds, i.e. how much time we give the
+            task to process until we can assume it didn't succeed
         ttl : int
             Number of (re-)tries, including the initial one, in case the
             job dies.
@@ -108,6 +104,7 @@ class TaskQueue:
         wrapped_task = {
             'ttl': ttl,
             'task': task,
+            'lease_timeout': lease_timeout,
             'deadline': None,
         }
         task = self._serialize(wrapped_task)
@@ -153,8 +150,8 @@ class TaskQueue:
         logger.info(f'Got task with id {task_id}')
 
         now = time.time()
-        deadline = now + self.lease_timeout
         task = self._deserialize(self.conn.get(self._tasks + task_id))
+        deadline = now + task['lease_timeout']
         task['deadline'] = deadline
         self.conn.set(self._tasks + task_id, self._serialize(task))
 
@@ -178,6 +175,7 @@ class TaskQueue:
         -------
         (any, str) :
             A tuple containing the task content and its id
+
         """
         while True:
             task, id_ = self.get()
