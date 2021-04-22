@@ -57,7 +57,7 @@ class TaskQueue:
         reset : bool
             If true, reset existing keys in the DB that have `name` as
             prefix.
-        ttl_zero_callback : function
+        ttl_zero_callback : callable
             a function that is called if a task's ttl <= 0
         """
         self._queue = name + ':queue'
