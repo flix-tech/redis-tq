@@ -100,7 +100,7 @@ def test_expired(taskqueue):
     taskqueue.add('foo', 1)
     taskqueue.get()
     assert not taskqueue.is_empty()
-    time.sleep(TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 1)
     assert taskqueue.is_empty()
 
     for i in range(5):
@@ -119,18 +119,18 @@ def test_ttl(taskqueue, caplog):
 
     # start a task and let it expire...
     taskqueue.get()
-    time.sleep(TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 1)
     # check and put it back into task queue
     assert not taskqueue.is_empty()
 
     # second attempt...
     taskqueue.get()
-    time.sleep(TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 1)
     assert not taskqueue.is_empty()
 
     # third attempt... *boom*
     taskqueue.get()
-    time.sleep(TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 1)
     caplog.clear()
     assert taskqueue.is_empty()
     assert "failed too many times" in caplog.text
@@ -207,7 +207,7 @@ def test_complete_rescheduled_task(taskqueue):
 
     # start a task and let it expire...
     _, task_id = taskqueue.get()
-    time.sleep(TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 1)
 
     # check and put it back into task queue
     assert not taskqueue.is_empty()
