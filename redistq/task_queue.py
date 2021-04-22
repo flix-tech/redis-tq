@@ -85,6 +85,7 @@ class TaskQueue:
             host=self._host,
             health_check_interval=30,
             socket_timeout=self.socket_timeout,
+            retry_on_timeout=True,
         )
 
     def __len__(self):
