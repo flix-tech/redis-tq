@@ -17,13 +17,13 @@ class TaskQueue:
 
     >>> tq = TaskQueue('localhost', 'myqueue')
     >>> for i in range(10):
-    ...     tq.add(some task)
+    ...     tq.add(some task, lease_timeout)
 
     On the consuming side:
 
     >>> tq = TaskQueue('localhost', 'myqueue')
     >>> while True:
-    ...     task, task_id = tq.get(lease_timeout)
+    ...     task, task_id = tq.get()
     ...     if task is not None:
     ...         # do something
     ...         tq.complete(task_id)
