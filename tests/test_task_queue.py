@@ -10,7 +10,7 @@ from redistq import task_queue
 
 
 REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
-LEASE_TIMEOUT = 1
+LEASE_TIMEOUT = 0.1
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ def test_complete(taskqueue):
     # interesting case: we complete the task after it expired already
     taskqueue.add('foo', LEASE_TIMEOUT, ttl=1)
     _, id_ = taskqueue.get()
-    time.sleep(LEASE_TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 0.1)
     assert taskqueue.is_empty()
     taskqueue.complete(id_)
     assert taskqueue.is_empty()
@@ -100,7 +100,7 @@ def test_expired(taskqueue):
     taskqueue.add('foo', LEASE_TIMEOUT, 1)
     taskqueue.get()
     assert not taskqueue.is_empty()
-    time.sleep(LEASE_TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 0.1)
     assert taskqueue.is_empty()
 
     for i in range(5):
@@ -119,18 +119,18 @@ def test_ttl(taskqueue, caplog):
 
     # start a task and let it expire...
     taskqueue.get()
-    time.sleep(LEASE_TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 0.1)
     # check and put it back into task queue
     assert not taskqueue.is_empty()
 
     # second attempt...
     taskqueue.get()
-    time.sleep(LEASE_TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 0.1)
     assert not taskqueue.is_empty()
 
     # third attempt... *boom*
     taskqueue.get()
-    time.sleep(LEASE_TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 0.1)
     caplog.clear()
     assert taskqueue.is_empty()
     assert "failed too many times" in caplog.text
@@ -146,20 +146,20 @@ def test_callback(taskqueue):
 
     # start a task and let it expire...
     taskqueue.get()
-    time.sleep(LEASE_TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 0.1)
     # check and put it back into task queue
     assert not taskqueue.is_empty()
     assert not mock_cb.called
 
     # second attempt...
     taskqueue.get()
-    time.sleep(LEASE_TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 0.1)
     assert not taskqueue.is_empty()
     assert not mock_cb.called
 
     # third attempt... *boom*
     taskqueue.get()
-    time.sleep(LEASE_TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 0.1)
     assert taskqueue.is_empty()
     assert mock_cb.called
 
@@ -207,7 +207,7 @@ def test_complete_rescheduled_task(taskqueue):
 
     # start a task and let it expire...
     _, task_id = taskqueue.get()
-    time.sleep(LEASE_TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 0.1)
 
     # check and put it back into task queue
     assert not taskqueue.is_empty()
@@ -222,12 +222,11 @@ def test_complete_rescheduled_task(taskqueue):
 @pytest.mark.redis
 def test_tolerate_double_completion(taskqueue):
     TASK_CONTENT = 'sloth'
-    taskqueue.timeout = LEASE_TIMEOUT
     taskqueue.add(TASK_CONTENT, LEASE_TIMEOUT, ttl=3)
 
     # start a task and let it expire...
     task, task_id = taskqueue.get()
-    time.sleep(LEASE_TIMEOUT + 1)
+    time.sleep(LEASE_TIMEOUT + 0.1)
 
     # check and put it back into task queue
     assert not taskqueue.is_empty()
