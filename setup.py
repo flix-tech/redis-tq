@@ -11,10 +11,9 @@ setup(
     long_description=meta['long_description'],
     long_description_content_type='text/markdown',
     keywords='redis task queue',
-    author="Team Bus Factor",
-    author_email="team.bus-factor@flixbus.com",
-    # FIXME!
-    url='https://example.com',
+    author="FlixTech",
+    author_email="open-source@flixbus.com",
+    url='https://github.com/flix-tech/redis-tq',
     python_requires='>=3.6',
     install_requires=[
         'redis',
