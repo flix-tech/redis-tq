@@ -26,9 +26,9 @@ On the producing side, populate the queue with tasks and a respective lease
 timeout:
 
 ```python
-tq = TaskQueue('localhost', 'myqueue', ttl=3)
+tq = TaskQueue('localhost', 'myqueue')
 for i in range(10):
-    tq.add(some task, lease_timeout)
+    tq.add(some task, lease_timeout, ttl=3)
 ```
 
 On the consuming side:
