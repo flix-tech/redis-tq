@@ -329,6 +329,13 @@ class TaskQueue:
             id_ = key.split(':')[-1]
 
             task = self.conn.get(key)
+            if task is None:
+                # race condition! between the time we got `key` from the
+                # set of tasks (this outer loop) and the time we tried
+                # to get that task from the queue, it has been completed
+                # and therefore deleted from all queues. In this case
+                # tasks is None and we can continue
+                continue
             task = self._deserialize(task)
 
             if task['deadline'] is None:
