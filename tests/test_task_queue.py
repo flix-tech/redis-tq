@@ -290,7 +290,7 @@ def test_iterator(taskqueue):
 
 
 @pytest.mark.redis
-def test_exired_leases_race(taskqueue, monkeypatch):
+def test_exired_leases_race(taskqueue, monkeypatch, caplog):
     # save the original conn.get so we can use it inside the mock
     get_orig = taskqueue.conn.get
 
@@ -307,6 +307,6 @@ def test_exired_leases_race(taskqueue, monkeypatch):
     taskqueue.add('foo', LEASE_TIMEOUT)
 
     monkeypatch.setattr(taskqueue.conn, 'get', mock_get)
-    # should not raise an exception if the internal conn.get returns
-    # None
+    caplog.set_level(logging.INFO)
     taskqueue._check_expired_leases()
+    assert "marked completed while we checked for" in caplog.text
