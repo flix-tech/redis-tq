@@ -114,7 +114,7 @@ class TaskQueue:
         self.conn.lpush(self._queue, id_)
 
     def get(self):
-        """Get a task from the task queue.
+        """Get a task from the task queue (non-blocking).
 
         This method returns the next task from the queue. It also puts
         this task into an internal processing queue so we can keep track
@@ -129,6 +129,10 @@ class TaskQueue:
         removed from the processing queue and the TTL is decreased by
         one. If TTL is still > 0 the task will be put back into the task
         queue for retry.
+
+        Note, this method is non-blocking, i.e. it returns immediately
+        even if there is nothing to return. See below for the return
+        value for this case.
 
         Returns
         -------
