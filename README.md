@@ -42,6 +42,9 @@ while True:
         tq.complete(task_id)
     if tq.is_empty():
         break
+    # tq.get is non-blocking, so you may want to sleep a
+    # bit before the next iteration
+    time.sleep(1)
 ```
 
 If the consumer crashes (i.e. the task is not marked as completed after
