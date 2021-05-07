@@ -14,6 +14,9 @@ setup(
     author="FlixTech",
     author_email="open-source@flixbus.com",
     url='https://github.com/flix-tech/redis-tq',
+    project_urls={
+        "Changelog": "https://github.com/flix-tech/redis-tq/blob/master/CHANGELOG.md",  # noqa
+    },
     python_requires='>=3.6',
     install_requires=[
         'redis',
