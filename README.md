@@ -1,6 +1,6 @@
 # redis-tq
 
-redis-tq is a [Redis-based][redis] Multi-producer, multi-consumer Queue.
+redis-tq is a [Redis-based][redis] multi-producer, multi-consumer Queue.
 Allows for sharing data between multiple processes or hosts.
 
 Tasks support a "lease time". After that time other workers may consider this
