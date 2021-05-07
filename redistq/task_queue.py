@@ -91,7 +91,7 @@ class TaskQueue:
         Parameters
         ----------
         task : something that can be JSON-serialized
-        lease_timeout : int
+        lease_timeout : float
             lease timeout in seconds, i.e. how much time we give the
             task to process until we can assume it didn't succeed
         ttl : int
@@ -99,6 +99,10 @@ class TaskQueue:
             job dies.
 
         """
+        # make sure the timeout is an actual number, otherwise we'll run
+        # into problems later when we calculate the actual deadline
+        lease_timeout = float(lease_timeout)
+
         # we wrap the task itself with some meta data
         id_ = uuid4().hex
         wrapped_task = {
