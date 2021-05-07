@@ -15,9 +15,13 @@ Based on [this example][source] but with many improvements added.
 
 ## Installing
 
+redis-tq is available on [PyPI][] so you can simply install via:
+
 ```sh
 $ pip install redis-tq
 ```
+
+[PyPI]: https://pypi.org/project/redis-tq/
 
 
 ## How to use
