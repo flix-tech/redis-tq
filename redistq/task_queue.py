@@ -147,10 +147,18 @@ class TaskQueue:
         """
         # See comment in __init__ about moving jobs between queues in an
         # atomic fashion before you modify!
-        task_id = self.conn.rpoplpush(
-            self._queue,
-            self._processing_queue,
-        )
+        try:
+            task_id = self.conn.rpoplpush(
+                self._queue,
+                self._processing_queue,
+            )
+        except redis.exceptions.ConnectionError as exc:
+            logger.exception('Redis disconnected, will retry...')
+            self.connect()
+            task_id = self.conn.rpoplpush(
+                self._queue,
+                self._processing_queue,
+            )
 
         if task_id is None:
             return None, None
