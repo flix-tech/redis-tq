@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from redistq import task_queue
+from redistq import TaskQueue
 
 
 REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
@@ -20,7 +20,7 @@ def taskqueue():
 
     name = str(uuid.uuid4())
 
-    tq = task_queue.TaskQueue(REDIS_HOST, name)
+    tq = TaskQueue(REDIS_HOST, name)
 
     yield tq
 

@@ -30,6 +30,8 @@ On the producing side, populate the queue with tasks and a respective lease
 timeout:
 
 ```python
+from redistq import TaskQueue
+
 tq = TaskQueue('localhost', 'myqueue')
 for i in range(10):
     tq.add(some task, lease_timeout, ttl=3)
@@ -38,6 +40,8 @@ for i in range(10):
 On the consuming side:
 
 ```python
+from redistq import TaskQueue
+
 tq = TaskQueue('localhost', 'myqueue')
 while True:
     task, task_id = tq.get()
