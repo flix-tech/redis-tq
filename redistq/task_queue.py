@@ -114,8 +114,8 @@ class TaskQueue:
         task = self._serialize(wrapped_task)
         # store the task + metadata and
         # put task-id into the task queue
-        # using pipeline for network optimization(reduces RTT time)
-        with self.conn.pipeline as pipeline:
+        # uses pipeline for network optimization(reduces RTT time)
+        with self.conn.pipeline() as pipeline:
             pipeline.set(self._tasks + id_, task)
             pipeline.lpush(self._queue, id_)
 
@@ -159,9 +159,15 @@ class TaskQueue:
             task_id = task_id.decode()
             logger.info(f'Got task with id {task_id}')
 
-            with self.conn.pipeline as pipeline:
+            with self.conn.pipeline() as pipeline:
                 try:
-                    # optimistic locking, to avoid race condition and retry
+                    # optimistic locking, to avoid race condition and retry.
+                    # requires transaction, setting deadline and moving task
+                    # from one queue to another should be atomic. If not then
+                    # there is a possibility that task do not have any
+                    # deadline(None) but it is in the self._processing_queue
+                    # and leads to dangling task sitting in redis until
+                    # manually removed.
                     pipeline.watch(self._processing_queue,
                                    self._tasks + task_id)
                     pipeline.multi()    # starts transaction
@@ -177,7 +183,6 @@ class TaskQueue:
                 except redis.WatchError:
                     logger.info(f'{task_id} is being processed by another '
                                 'worker, will fetch new task')
-                    continue
 
     def __iter__(self):
         """Iterate over tasks and mark them as complete.
@@ -324,8 +329,8 @@ class TaskQueue:
         yet to be processed.
 
         """
-        # to through all tasks that we currently have and check the ones
-        # with expired timeout
+        # goes through all the tasks that we currently have in self.processing_queue
+        # and check the ones with expired timeout
         now = time.time()
         for task_id in self.conn.lrange(self._processing_queue, 0, -1):
 
