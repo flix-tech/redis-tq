@@ -158,7 +158,6 @@ class TaskQueue:
                 return None, None
 
             task_id = task_id.decode()
-            task = self.conn.get(self._tasks + task_id)
             logger.info(f'Got task with id {task_id}')
 
             with self.conn.pipeline() as pipeline:
@@ -174,11 +173,12 @@ class TaskQueue:
                                    self._tasks + task_id)
                     pipeline.multi()    # starts transaction
                     now = time.time()
+                    task = self.conn.get(self._tasks + task_id)
                     task = self._deserialize(task)
                     task['deadline'] = now + task['lease_timeout']
                     pipeline.set(self._tasks + task_id, self._serialize(task))
-                    pipeline.rpoplpush(self._queue,
-                                       self._processing_queue)
+                    pipeline.lrem(self._queue, 0, task_id)
+                    pipeline.lpush(self._processing_queue, task_id)
                     pipeline.execute()  # ends transaction
                     return task['task'], task_id
                 except redis.WatchError:
