@@ -397,3 +397,4 @@ class TaskQueue:
         keys = self.conn.keys(f'{self._tasks}*')
         if keys:
             self.conn.delete(*keys)
+        print("cleaned")
