@@ -339,7 +339,6 @@ class TaskQueue:
 
             task_id = task_id.decode()
             task = self.conn.get(self._tasks + task_id)
-            print(task, task_id)
 
             if task is None:
                 # race condition! between the time we got `key` from the
@@ -347,8 +346,8 @@ class TaskQueue:
                 # to get that task from the queue, it has been completed
                 # and therefore deleted from all queues. In this case
                 # tasks is None and we can continue
-                logger.warning(f"Task {task_id} was marked completed while we "
-                               "checked for expired leases, nothing to do.")
+                logger.info(f"Task {task_id} was marked completed while we "
+                            "checked for expired leases, nothing to do.")
                 continue
 
             task = self._deserialize(task)
