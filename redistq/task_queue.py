@@ -339,7 +339,7 @@ class TaskQueue:
 
             task_id = task_id.decode()
             task = self.conn.get(self._tasks + task_id)
-            logger.info("checking")
+
             if task is None:
                 # race condition! between the time we got `key` from the
                 # set of tasks (this outer loop) and the time we tried
@@ -397,4 +397,3 @@ class TaskQueue:
         keys = self.conn.keys(f'{self._tasks}*')
         if keys:
             self.conn.delete(*keys)
-        print(list(self.conn.scan_iter("*")))

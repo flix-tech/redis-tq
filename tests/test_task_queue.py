@@ -297,7 +297,7 @@ def test_exired_leases_race(taskqueue, monkeypatch, caplog):
     taskqueue.add('foo', LEASE_TIMEOUT)
 
     monkeypatch.setattr(taskqueue.conn, 'get', mock_get)
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.INFO, logger="__main__")
     taskqueue._check_expired_leases()
     assert "marked completed while we checked for" in caplog.text
 
