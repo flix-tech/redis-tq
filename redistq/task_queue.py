@@ -118,6 +118,7 @@ class TaskQueue:
         with self.conn.pipeline() as pipeline:
             pipeline.set(self._tasks + id_, task)
             pipeline.lpush(self._queue, id_)
+            pipeline.execute()
 
     def get(self):
         """Get a task from the task queue (non-blocking).
