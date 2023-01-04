@@ -158,6 +158,7 @@ class TaskQueue:
                 return None, None
 
             task_id = task_id.decode()
+            task = self.conn.get(self._tasks + task_id)
             logger.info(f'Got task with id {task_id}')
 
             with self.conn.pipeline() as pipeline:
@@ -173,7 +174,6 @@ class TaskQueue:
                                    self._tasks + task_id)
                     pipeline.multi()    # starts transaction
                     now = time.time()
-                    task = self.conn.get(self._tasks + task_id)
                     task = self._deserialize(task)
                     task['deadline'] = now + task['lease_timeout']
                     pipeline.set(self._tasks + task_id, self._serialize(task))
