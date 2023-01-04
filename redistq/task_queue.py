@@ -178,10 +178,9 @@ class TaskQueue:
                     task['deadline'] = now + task['lease_timeout']
                     pipeline.multi()    # starts transaction
                     pipeline.set(self._tasks + task_id, self._serialize(task))
-                    pipeline.lrem(self._queue, 0, task_id)
+                    pipeline.lrem(self._queue, -1, task_id)
                     pipeline.lpush(self._processing_queue, task_id)
                     pipeline.execute()  # ends transaction
-                    logger.info(f'{task}')
                     return task['task'], task_id
                 except redis.WatchError:
                     logger.info(f'{task_id} is being processed by another '
