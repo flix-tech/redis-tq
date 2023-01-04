@@ -116,6 +116,7 @@ class TaskQueue:
         # put task-id into the task queue
         # uses pipeline for network optimization(reduces RTT time)
         with self.conn.pipeline() as pipeline:
+            pipeline.multi()
             pipeline.set(self._tasks + id_, task)
             pipeline.lpush(self._queue, id_)
             pipeline.execute()
@@ -171,15 +172,16 @@ class TaskQueue:
                     # manually removed.
                     pipeline.watch(self._processing_queue,
                                    self._tasks + task_id)
-                    pipeline.multi()    # starts transaction
                     now = time.time()
-                    task = self.conn.get(self._tasks + task_id)
+                    task = pipeline.get(self._tasks + task_id)
                     task = self._deserialize(task)
                     task['deadline'] = now + task['lease_timeout']
+                    pipeline.multi()    # starts transaction
                     pipeline.set(self._tasks + task_id, self._serialize(task))
                     pipeline.lrem(self._queue, 0, task_id)
                     pipeline.lpush(self._processing_queue, task_id)
                     pipeline.execute()  # ends transaction
+                    logger.info(f'{task}')
                     return task['task'], task_id
                 except redis.WatchError:
                     logger.info(f'{task_id} is being processed by another '
