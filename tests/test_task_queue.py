@@ -171,7 +171,7 @@ def test_reschedule(taskqueue):
     # task queue should be empty as 'foo' is in the processing queue
     assert taskqueue.get() == (None, None)
 
-    taskqueue.reschedule(id_.decode())
+    taskqueue.reschedule(id_)
     task, _ = taskqueue.get()
     assert task == 'foo'
 

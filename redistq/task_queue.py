@@ -277,7 +277,8 @@ class TaskQueue:
             while True:
                 try:
                     found = self.conn.lpos(self._processing_queue, task_id)
-                    if not found:
+                    # if not found then it returns none, otherwise index
+                    if found is None:
                         raise ValueError(f'Task {task_id} does not exist.')
                     task = self.conn.get(self._tasks + task_id)
                     pipeline.watch(self._processing_queue,
