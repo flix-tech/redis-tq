@@ -332,13 +332,14 @@ class TaskQueue:
         yet to be processed.
 
         """
-        # goes through all the tasks that we currently have in self.processing_queue
-        # and check the ones with expired timeout
+        # goes through all the tasks that we currently have in
+        # self.processing_queue and check the ones with expired timeout
         now = time.time()
         for task_id in self.conn.lrange(self._processing_queue, 0, -1):
 
             task_id = task_id.decode()
             task = self.conn.get(self._tasks + task_id)
+            print(task, task_id)
 
             if task is None:
                 # race condition! between the time we got `key` from the
