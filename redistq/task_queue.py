@@ -346,8 +346,8 @@ class TaskQueue:
                 # to get that task from the queue, it has been completed
                 # and therefore deleted from all queues. In this case
                 # tasks is None and we can continue
-                logger.info(f"Task {task_id} was marked completed while we "
-                            "checked for expired leases, nothing to do.")
+                logger.warning(f"Task {task_id} was marked completed while we "
+                               "checked for expired leases, nothing to do.")
                 continue
 
             task = self._deserialize(task)
