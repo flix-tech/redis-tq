@@ -1,5 +1,5 @@
-pytest==6.2.1
-pytest-cov==2.10.1
-flake8==3.8.4
-wheel==0.36.2
-twine==3.4.1
+pytest==7.2.0
+pytest-cov==4.0.0
+flake8==6.0.0
+wheel==0.38.4
+twine==4.0.2
