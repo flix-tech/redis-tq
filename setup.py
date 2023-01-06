@@ -17,7 +17,7 @@ setup(
     project_urls={
         "Changelog": "https://github.com/flix-tech/redis-tq/blob/master/CHANGELOG.md",  # noqa
     },
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     install_requires=[
         'redis',
     ],
