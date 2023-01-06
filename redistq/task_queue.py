@@ -112,10 +112,14 @@ class TaskQueue:
             'deadline': None,
         }
         task = self._serialize(wrapped_task)
-        # store the task + metadata
-        self.conn.set(self._tasks + id_, task)
+        # store the task + metadata and
         # put task-id into the task queue
-        self.conn.lpush(self._queue, id_)
+        # uses pipeline for network optimization(reduces RTT time)
+        with self.conn.pipeline() as pipeline:
+            pipeline.multi()
+            pipeline.set(self._tasks + id_, task)
+            pipeline.lpush(self._queue, id_)
+            pipeline.execute()
 
     def get(self):
         """Get a task from the task queue (non-blocking).
@@ -147,23 +151,40 @@ class TaskQueue:
         """
         # See comment in __init__ about moving jobs between queues in an
         # atomic fashion before you modify!
-        task_id = self.conn.rpoplpush(
-            self._queue,
-            self._processing_queue,
-        )
+        while True:
+            task_id = self.conn.lindex(self._queue, -1)
 
-        if task_id is None:
-            return None, None
-        task_id = task_id.decode()
-        logger.info(f'Got task with id {task_id}')
+            # returns none when queue is empty
+            if task_id is None:
+                return None, None
 
-        now = time.time()
-        task = self._deserialize(self.conn.get(self._tasks + task_id))
-        deadline = now + task['lease_timeout']
-        task['deadline'] = deadline
-        self.conn.set(self._tasks + task_id, self._serialize(task))
+            task_id = task_id.decode()
+            logger.info(f'Got task with id {task_id}')
 
-        return task['task'], task_id
+            with self.conn.pipeline() as pipeline:
+                try:
+                    # optimistic locking, to avoid race condition and retry.
+                    # requires transaction, setting deadline and moving task
+                    # from one queue to another should be atomic. If not then
+                    # there is a possibility that task do not have any
+                    # deadline(None) but it is in the self._processing_queue
+                    # and leads to dangling task sitting in redis until
+                    # manually removed.
+                    pipeline.watch(self._processing_queue,
+                                   self._tasks + task_id)
+                    now = time.time()
+                    task = pipeline.get(self._tasks + task_id)
+                    task = self._deserialize(task)
+                    task['deadline'] = now + task['lease_timeout']
+                    pipeline.multi()    # starts transaction
+                    pipeline.set(self._tasks + task_id, self._serialize(task))
+                    pipeline.lrem(self._queue, -1, task_id)
+                    pipeline.lpush(self._processing_queue, task_id)
+                    pipeline.execute()  # ends transaction
+                    return task['task'], task_id
+                except redis.WatchError:
+                    logger.info(f'{task_id} is being processed by another '
+                                'worker, will fetch new task')
 
     def __iter__(self):
         """Iterate over tasks and mark them as complete.
@@ -255,13 +276,13 @@ class TaskQueue:
         with self.conn.pipeline() as pipeline:
             while True:
                 try:
-                    pipeline.watch(self._processing_queue, self._tasks)
-                    procs = pipeline.lrange(self._processing_queue, 0, -1)
-                    procs = [p.decode() for p in procs]
-                    if task_id not in procs:
+                    found = self.conn.lpos(self._processing_queue, task_id)
+                    # if not found then it returns none, otherwise index
+                    if found is None:
                         raise ValueError(f'Task {task_id} does not exist.')
                     task = self.conn.get(self._tasks + task_id)
-
+                    pipeline.watch(self._processing_queue,
+                                   self._tasks + task_id)
                     pipeline.multi()
                     pipeline.lrem(self._processing_queue, 0, task_id)
                     pipeline.lpush(self._queue, task_id)
@@ -269,8 +290,7 @@ class TaskQueue:
                     task = self._deserialize(task)
                     task['deadline'] = None
                     task = self._serialize(task)
-                    self.conn.set(self._tasks + task_id, task)
-
+                    pipeline.set(self._tasks + task_id, task)
                     pipeline.execute()
                     break
                 except redis.WatchError:
@@ -307,60 +327,58 @@ class TaskQueue:
         reschedule the task into the task queue or, if the TTL is
         exhausted, we remove the task completely.
 
+        Note: lease check is only performed against the task in
+        self._processing queue, self._queue is untouched since its
+        yet to be processed.
+
         """
-        # to through all tasks that we currently have and check the ones
-        # with expired timeout
+        # goes through all the tasks that we currently have in
+        # self.processing_queue and check the ones with expired timeout
         now = time.time()
-        for key in self.conn.scan_iter(match=self._tasks + '*'):
+        for task_id in self.conn.lrange(self._processing_queue, 0, -1):
 
-            key = key.decode()
-            id_ = key.split(':')[-1]
+            task_id = task_id.decode()
+            task = self.conn.get(self._tasks + task_id)
 
-            task = self.conn.get(key)
             if task is None:
                 # race condition! between the time we got `key` from the
                 # set of tasks (this outer loop) and the time we tried
                 # to get that task from the queue, it has been completed
                 # and therefore deleted from all queues. In this case
                 # tasks is None and we can continue
-                logger.info(f"Task {key} was marked completed while we "
+                logger.info(f"Task {task_id} was marked completed while we "
                             "checked for expired leases, nothing to do.")
                 continue
+
             task = self._deserialize(task)
 
-            if task['deadline'] is None:
-                # task hasn't started yet, we don't care
-                continue
-
             if task['deadline'] <= now:
-                logger.warning(
-                    f'A lease expired, probably job failed: {key} => {task}')
+                logger.warning('A lease expired, probably job failed: '
+                               f'{task_id} => {task}')
                 task['ttl'] -= 1
-                if task['ttl'] <= 0:
-                    logger.error(f'Job {task} with it {id_ } failed too many'
-                                 ' times, dropping it.')
-                    self.conn.lrem(self._processing_queue, 0, id_)
-                    self.conn.delete(key)
-                    if self.ttl_zero_callback:
-                        self.ttl_zero_callback(id_, task)
-                    continue
-
-                task['deadline'] = None
-                task = self._serialize(task)
                 # See comment in __init__ about moving jobs between
                 # queues in an atomic fashion before you modify!
                 with self.conn.pipeline() as pipeline:
-                    while True:
-                        try:
-                            pipeline.watch(key, self._processing_queue)
-                            pipeline.multi()
-                            pipeline.set(key, task)
-                            pipeline.lrem(self._processing_queue, 0, id_)
-                            pipeline.lpush(self._queue, id_)
-                            pipeline.execute()
-                            break
-                        except redis.WatchError:
-                            continue
+                    try:
+                        pipeline.watch(self._tasks + task_id)
+                        pipeline.multi()
+                        if task['ttl'] <= 0:
+                            logger.error(f'Job {task} with id {task_id} '
+                                         'failed too many times, dropping it.')
+                            pipeline.lrem(self._processing_queue, 0, task_id)
+                            pipeline.delete(self._tasks + task_id)
+                            if self.ttl_zero_callback:
+                                self.ttl_zero_callback(task_id, task)
+                        else:
+                            task['deadline'] = None
+                            task = self._serialize(task)
+                            pipeline.set(self._tasks + task_id, task)
+                            pipeline.lrem(self._processing_queue, 0, task_id)
+                            pipeline.lpush(self._queue, task_id)
+                        pipeline.execute()
+                    except redis.WatchError:
+                        logger.info('Skipping lease check, already performed '
+                                    'by another worker')
 
     def _serialize(self, task):
         task = json.dumps(task, sort_keys=True)

@@ -296,6 +296,9 @@ def test_exired_leases_race(taskqueue, monkeypatch, caplog):
 
     taskqueue.add('foo', LEASE_TIMEOUT)
 
+    # move task to processing queue
+    taskqueue.get()
+
     monkeypatch.setattr(taskqueue.conn, 'get', mock_get)
     caplog.set_level(logging.INFO)
     taskqueue._check_expired_leases()
@@ -309,7 +312,7 @@ def test_lease_timout_is_none(taskqueue):
 
 
 @pytest.mark.redis
-def test_lease_timout_is_not_flaot_or_int(taskqueue):
+def test_lease_timout_is_not_float_or_int(taskqueue):
     # funny thing, a boolean can be converted to float (i.e. 0.0 and
     # 1.0) without causing an error. so be it
     with pytest.raises(ValueError):
