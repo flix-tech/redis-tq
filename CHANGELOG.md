@@ -2,6 +2,9 @@
 
 ## 0.0.9 - 2023-01-06
 
+## Changes
+
+* Remove deprecated support for Python 3.6, add Python 3.10 and 3.11
 ## Fix
 * avoid having dangling tasks if the client disconnects while starting a new one. Thanks [Avinash](https://github.com/nash0740)
 
