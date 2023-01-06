@@ -24,9 +24,12 @@ jobs:
       fail-fast: false
       matrix:
         python-version:
-          - 3.7
+        # 3.7 works, but is going to be EOL soon and flake8
+        # removed support for it in the latest version
           - 3.8
           - 3.9
+          - 3.10
+          - 3.11
 
     steps:
     - uses: actions/checkout@v2
