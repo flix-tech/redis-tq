@@ -161,6 +161,14 @@ class TaskQueue:
             task_id = task_id.decode()
             logger.info(f'Got task with id {task_id}')
 
+            task = self.conn.get(self._tasks + task_id)
+            if task is None:
+                logger.info(f'{task_id} was marked complete by other worker')
+                continue
+
+            task = self._deserialize(task)
+            now = time.time()
+
             with self.conn.pipeline() as pipeline:
                 try:
                     # optimistic locking, to avoid race condition and retry.
@@ -172,9 +180,6 @@ class TaskQueue:
                     # manually removed.
                     pipeline.watch(self._processing_queue,
                                    self._tasks + task_id)
-                    now = time.time()
-                    task = pipeline.get(self._tasks + task_id)
-                    task = self._deserialize(task)
                     task['deadline'] = now + task['lease_timeout']
                     pipeline.multi()    # starts transaction
                     pipeline.set(self._tasks + task_id, self._serialize(task))
@@ -235,22 +240,15 @@ class TaskQueue:
 
         """
         logger.info(f'Marking task {task_id} as completed')
-        removed = self.conn.lrem(self._processing_queue, 0, task_id)
-        # check if we actually removed something
-        if removed == 0:
-            logger.warning(f'Task {task_id} was not being processed, '
-                           'so cannot mark as completed.')
+        with self.conn.pipeline() as pipeline:
+            pipeline.multi()
+            pipeline.lrem(self._processing_queue, 0, task_id)
             # this happens because another worker marked it as expired
             # so it was put back into the queue
             # now we remove it to avoid a futile re-processing
-            deleted_retry = self.conn.lrem(self._queue, 0, task_id)
-            # if it's not in the queue, this was the last attempt
-            # allowed by the TTL
-            if deleted_retry == 0:
-                logger.warning(f'Task {task_id} was not not in the queue,'
-                               ' this was the last attempt and succeeded.')
-        # delete the lease as well
-        self.conn.delete(self._tasks + task_id)
+            pipeline.lrem(self._queue, 0, task_id)
+            pipeline.delete(self._tasks + task_id)
+            pipeline.execute()
 
     def reschedule(self, task_id):
         """Move a task back from the processing- to the task queue.
@@ -351,6 +349,11 @@ class TaskQueue:
                 continue
 
             task = self._deserialize(task)
+
+            if task['deadline'] is None:
+                # race condition! task was already moved by other worker
+                logger.info(f"Task {task_id} was moved by other worker")
+                continue
 
             if task['deadline'] <= now:
                 logger.warning('A lease expired, probably job failed: '
