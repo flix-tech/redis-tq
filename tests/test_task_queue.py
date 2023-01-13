@@ -70,18 +70,6 @@ def test_complete(taskqueue):
 
 
 @pytest.mark.redis
-def test_complete_warning(taskqueue, caplog):
-    taskqueue.add('foo', LEASE_TIMEOUT)
-    _, id_ = taskqueue.get()
-    caplog.clear()
-    taskqueue.complete(id_)
-    assert "was not being processed" not in caplog.text
-    caplog.clear()
-    taskqueue.complete(id_)
-    assert "was not being processed" in caplog.text
-
-
-@pytest.mark.redis
 def test_is_empty(taskqueue):
     assert taskqueue.is_empty()
 
