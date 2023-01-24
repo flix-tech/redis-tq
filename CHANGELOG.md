@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.11 - 2023-01-24
+
+## Fix
+* correctly handle race condition when a task was assigned to two workers at the same time by locking. Thanks [Avinash](https://github.com/nash0740)
 ## 0.0.10 - 2023-01-16
 
 ## Fix
