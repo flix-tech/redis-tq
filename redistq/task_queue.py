@@ -410,7 +410,7 @@ class TaskQueue:
 
             returns
             -------
-            client_id otherwise False
+            bool
                 True: Successfully accquired lock
                 False: Failed to get lock
         """
