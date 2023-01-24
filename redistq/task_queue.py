@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+import random
 from uuid import uuid4
 
 import redis
@@ -57,6 +58,12 @@ class TaskQueue:
         self._processing_queue = name + ':processing'
         self._tasks = name + ':tasks:'
         self._host = host
+        self.client_id = uuid4().hex
+        logger.info(f'Redis client id: {self.client_id}')
+
+        # automatically expires lock in 10 seconds
+        self.get_lock = name + ':get_lock'
+        self.lock_expiry = 10
 
         # called when ttl <= 0 for a task
         self.ttl_zero_callback = ttl_zero_callback
@@ -151,45 +158,51 @@ class TaskQueue:
         """
         # See comment in __init__ about moving jobs between queues in an
         # atomic fashion before you modify!
-        while True:
-            task_id = self.conn.lindex(self._queue, -1)
+        # acquire lock before fetching task to avoid race condition
+        while not self._acquire_lock(self.get_lock):
+            # sleep and try again randomly between 0-2 secs
+            time.sleep(random.uniform(0.0, 2.0))
 
-            # returns none when queue is empty
-            if task_id is None:
-                return None, None
+        task_id = self.conn.lindex(self._queue, -1)
 
-            task_id = task_id.decode()
-            logger.info(f'Got task with id {task_id}')
+        # returns none when queue is empty
+        if task_id is None:
+            self._release_lock(self.get_lock)
+            return None, None
 
-            task = self.conn.get(self._tasks + task_id)
-            if task is None:
-                logger.info(f'{task_id} was marked complete by other worker')
-                continue
+        task_id = task_id.decode()
+        logger.info(f'Got task with id {task_id}')
 
-            task = self._deserialize(task)
-            now = time.time()
-
-            with self.conn.pipeline() as pipeline:
-                try:
-                    # optimistic locking, to avoid race condition and retry.
-                    # requires transaction, setting deadline and moving task
-                    # from one queue to another should be atomic. If not then
-                    # there is a possibility that task do not have any
-                    # deadline(None) but it is in the self._processing_queue
-                    # and leads to dangling task sitting in redis until
-                    # manually removed.
-                    pipeline.watch(self._processing_queue,
-                                   self._tasks + task_id)
-                    task['deadline'] = now + task['lease_timeout']
-                    pipeline.multi()    # starts transaction
-                    pipeline.set(self._tasks + task_id, self._serialize(task))
-                    pipeline.lrem(self._queue, -1, task_id)
-                    pipeline.lpush(self._processing_queue, task_id)
-                    pipeline.execute()  # ends transaction
-                    return task['task'], task_id
-                except redis.WatchError:
-                    logger.info(f'{task_id} is being processed by another '
-                                'worker, will fetch new task')
+        with self.conn.pipeline() as pipeline:
+            try:
+                # requires transaction, setting deadline and moving task
+                # from one queue to another should be atomic. If not then
+                # there is a possibility that task do not have any
+                # deadline(None) but it is in the self._processing_queue
+                # and leads to dangling task sitting in redis until
+                # manually removed.
+                # After getting the lock from above, it should not raise
+                # WatchError, this is just an extra precautions incase
+                # lock timesout
+                pipeline.watch(self._tasks + task_id)
+                task = pipeline.get(self._tasks + task_id)
+                # returns none when task is not found
+                if task is None:
+                    logger.info(f'{task_id} was completed by other worker')
+                    self._release_lock(self.get_lock, pipeline)
+                    return None, None
+                pipeline.multi()    # starts transaction
+                task = self._deserialize(task)
+                task['deadline'] = time.time() + task['lease_timeout']
+                pipeline.set(self._tasks + task_id, self._serialize(task))
+                pipeline.lrem(self._queue, -1, task_id)
+                pipeline.lpush(self._processing_queue, task_id)
+                self._release_lock(self.get_lock, pipeline)
+                pipeline.execute()  # ends transaction
+                return task['task'], task_id
+            except redis.WatchError:
+                logger.info(f'{task_id} is being processed by another '
+                            'worker, will fetch new task')
 
     def __iter__(self):
         """Iterate over tasks and mark them as complete.
@@ -382,6 +395,53 @@ class TaskQueue:
                     except redis.WatchError:
                         logger.info('Skipping lease check, already performed '
                                     'by another worker')
+
+    def _acquire_lock(self, lockname):
+        """ Acquire lock for a duration of lock timeout
+            and automatically releases when expires
+
+            If fails to get lock then check the expiration on the lock
+            and if it's not set, set it. This could happen when client crashes
+            between set and expire operation (occurs rarely)
+
+            parameters
+            ----------
+                lockname: str
+
+            returns
+            -------
+            bool
+                True: Successfully accquired lock
+                False: Failed to get lock
+        """
+        if self.conn.setnx(lockname, self.client_id):
+            self.conn.expire(lockname, self.lock_expiry)
+            return True
+        elif self.conn.ttl(lockname) == -1:
+            self.conn.expire(lockname, self.lock_expiry)
+        return False
+
+    def _release_lock(self, lockname, pipe=None):
+        """ Releases lock only if it owns the lock
+
+            A worker should not release the lock owned by another worker
+            currently this feature is not available in redis
+            which requires CAS/CAD (compare and set/delete) functionality
+
+            Info:
+            ----
+            https://github.com/redis/redis/issues/10345
+            https://github.com/redis/redis/pull/8361
+
+            Until it is implemented, we use lua script for Atomicity reasons
+        """
+        # LUA Script: release lock if it owns
+        script = "if redis.call('get', KEYS[1]) == ARGV[1] then redis.call('del', KEYS[1]) end"  # NOQA
+
+        if pipe:
+            pipe.eval(script, 1, lockname, self.client_id)
+        else:
+            self.conn.eval(script, 1, lockname, self.client_id)
 
     def _serialize(self, task):
         task = json.dumps(task, sort_keys=True)
