@@ -167,7 +167,7 @@ class TaskQueue:
 
         # returns none when queue is empty
         if task_id is None:
-            self.conn.delete(self.get_lock)
+            self._release_lock(self.get_lock)
             return None, None
 
         task_id = task_id.decode()
@@ -189,7 +189,7 @@ class TaskQueue:
                 # returns none when task is not found
                 if task is None:
                     logger.info(f'{task_id} was completed by other worker')
-                    pipeline.delete(self.get_lock)
+                    self._release_lock(self.get_lock, pipeline)
                     return None, None
                 pipeline.multi()    # starts transaction
                 task = self._deserialize(task)
@@ -197,7 +197,7 @@ class TaskQueue:
                 pipeline.set(self._tasks + task_id, self._serialize(task))
                 pipeline.lrem(self._queue, -1, task_id)
                 pipeline.lpush(self._processing_queue, task_id)
-                pipeline.delete(self.get_lock)
+                self._release_lock(self.get_lock, pipeline)
                 pipeline.execute()  # ends transaction
                 return task['task'], task_id
             except redis.WatchError:
@@ -420,6 +420,28 @@ class TaskQueue:
         elif self.conn.ttl(lockname) == -1:
             self.conn.expire(lockname, self.lock_expiry)
         return False
+
+    def _release_lock(self, lockname, pipe=None):
+        """ Releases lock only if it owns the lock
+
+            A worker should not release the lock owned by another worker
+            currently this feature is not available in redis
+            which requires CAS/CAD (compare and set/delete) functionality
+
+            Info:
+            ----
+            https://github.com/redis/redis/issues/10345
+            https://github.com/redis/redis/pull/8361
+
+            Until it is implemented, we use lua script for Atomicity reasons
+        """
+        # LUA Script: release lock if it owns
+        script = "if redis.call('get', KEYS[1]) == ARGV[1] then redis.call('del', KEYS[1]) end"  # NOQA
+
+        if pipe:
+            pipe.eval(script, 1, lockname, self.client_id)
+        else:
+            self.conn.eval(script, 1, lockname, self.client_id)
 
     def _serialize(self, task):
         task = json.dumps(task, sort_keys=True)

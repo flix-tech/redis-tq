@@ -333,3 +333,25 @@ def test_lock_automatically_releases(taskqueue):
     taskqueue.client_id = 1234
     time.sleep(taskqueue.lock_expiry)
     assert taskqueue._acquire_lock(taskqueue.get_lock)
+
+
+@pytest.mark.redis
+def test_release_lock_it_owns(taskqueue):
+    # acquire lock
+    taskqueue._acquire_lock(taskqueue.get_lock)
+
+    # release its own lock
+    taskqueue._release_lock(taskqueue.get_lock)
+    assert taskqueue.conn.get(taskqueue.get_lock) is None
+
+
+@pytest.mark.redis
+def test_do_not_release_lock_owned_by_other(taskqueue):
+    # mimick lock obtained by other worker
+    client_id = taskqueue.client_id
+    taskqueue._acquire_lock(taskqueue.get_lock)
+
+    # current worker should not release the lock owned by other worker
+    taskqueue.client_id = 1234
+    taskqueue._release_lock(taskqueue.get_lock)
+    assert taskqueue.conn.get(taskqueue.get_lock).decode() == client_id
